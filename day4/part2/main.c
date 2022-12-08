@@ -9,7 +9,7 @@ int main()
     while (fgets(buffer, 128, file) != NULL)
     {
         sscanf(buffer, "%d-%d, %d-%d", &a0, &a1, &b0, &b1);
-        if ((a0 <= b0 && a1 >= b1) || (b0 <= a0) && (b1 >= a1))
+        if ((a1 >= b0 && a0 <= b1) || (b1 >= a0 && b0 <= a1))
             counter++;
     }
 
