@@ -1,8 +1,30 @@
+#include <windows.h>
 #include <stdio.h>
 #include <string.h>
 
 #define SIZE 99
 #define VISIBLE_BIT (1 << 7)
+
+double PCFreq = 0.0;
+__int64 CounterStart = 0;
+
+void StartCounter()
+{
+    LARGE_INTEGER li;
+    QueryPerformanceFrequency(&li);
+
+    PCFreq = (double)(li.QuadPart)/1000.0;
+
+    QueryPerformanceCounter(&li);
+    CounterStart = li.QuadPart;
+}
+
+double GetCounter()
+{
+    LARGE_INTEGER li;
+    QueryPerformanceCounter(&li);
+    return (double)(li.QuadPart-CounterStart)/PCFreq;
+}
 
 void check_trees(char* trees, int step, int *total)
 {
@@ -30,6 +52,7 @@ void check_trees(char* trees, int step, int *total)
 
 int main()
 {
+    StartCounter();
     FILE *file = fopen("../input.txt", "r");
 
     char buffer[128];
@@ -50,4 +73,5 @@ int main()
     }
 
     printf("Answer: %d\n", visible_trees);
+    printf("%f\n", GetCounter());
 }
