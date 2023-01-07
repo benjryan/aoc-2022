@@ -15,8 +15,8 @@ typedef struct Valve
 typedef struct Path
 {
     char opened[256];
-    char minute;
-    char valves[30];
+    char minute[2];
+    char valves[2][30];
     int rate;
     int pressure;
 } Path;
@@ -41,18 +41,21 @@ char get_valve_index(short id)
     return 255;
 }
 
-void simulate_path(Path path)
+void simulate_path(Path path, int player)
 {
-    path.pressure += path.rate;
+    if (player == 0)
+        path.pressure += path.rate;
+
+    int minute = path.minute[player];
 
     // Optimisation - Safe to say if we haven't released anything in 5 minutes
     // then we're not breaking any records.
-    if (path.minute >= 5 && path.rate == 0)
+    if (minute >= 5 && path.rate == 0)
         return;
 
-    if (path.minute == 29)
+    if (minute == 25)
     {
-        //printf("minute %d, pressure %d\n", path.minute, path.pressure);
+        //printf("p = %d, minute %d, pressure %d\n", player, minute, path.pressure);
         if (path.pressure > best_pressure)
         {
             best_pressure = path.pressure;
@@ -61,19 +64,20 @@ void simulate_path(Path path)
     }
 
     int simulated = 0;
-    char valve_index = path.valves[path.minute];
+    char other_player = (player + 1) % 2;
+    char valve_index = path.valves[player][minute];
     Valve* valve = valves + valve_index;
-    
+
     // open
     if (valve->rate > 0 && !path.opened[valve_index])
     {
         Path new_path = path;
         new_path.opened[valve_index] = 1;
         new_path.rate += valve->rate;
-        new_path.minute++;
-        new_path.valves[new_path.minute] = valve_index;
-        //printf("minute %d, open %d\n", path.minute, (int)valve_index);
-        simulate_path(new_path);
+        new_path.minute[player]++;
+        new_path.valves[player][new_path.minute[player]] = valve_index;
+        //printf("p = %d, minute %d, open %d\n", player, minute, (int)valve_index);
+        simulate_path(new_path, other_player);
         simulated = 1;
     }
 
@@ -85,39 +89,43 @@ void simulate_path(Path path)
             continue;
 
         int in_history = 0;
-        for (int j = 0; j < path.minute; ++j)
+        for (int p = 0; p < 2; p++)
         {
-            if (next_index == path.valves[j])
+            for (int j = 0; j < path.minute[p]; ++j)
             {
-                in_history = 1;
-                break;
+                if (next_index == path.valves[p][j])
+                {
+                    in_history = 1;
+                    goto exit_loop;
+                }
             }
         }
 
+exit_loop:
         if (in_history)
             continue;
 
         Path new_path = path;
-        new_path.minute++;
-        new_path.valves[new_path.minute] = next_index;
-        //printf("minute %d, move %d\n", path.minute, (int)next_index);
-        simulate_path(new_path);
+        new_path.minute[player]++;
+        new_path.valves[player][new_path.minute[player]] = next_index;
+        //printf("p = %d, minute %d, move %d\n", player, minute, (int)next_index);
+        simulate_path(new_path, other_player);
         simulated = 1;
     }
     
     // the case where we have nothing left to do
     if (simulated == 0)
     {
-        //printf("minute %d, wait %d\n", path.minute, (int)valve_index);
-        path.minute++;
-        path.valves[path.minute] = valve_index;
-        simulate_path(path);
+        //printf("p = %d, minute %d, wait %d\n", player, minute, (int)valve_index);
+        path.minute[player]++;
+        path.valves[player][path.minute[player]] = valve_index;
+        simulate_path(path, other_player);
     }
 }
 
 int main()
 {
-    time_t time_start = clock(); 
+    time_t time_start = clock();
     FILE *file = fopen("../input.txt", "r");
 
     char buffer[256];
@@ -163,9 +171,11 @@ int main()
     }
 
     Path start_path = {};
-    start_path.valves[0] = get_valve_index(get_valve_id("AA"));
-    simulate_path(start_path);
+    char valve_index = get_valve_index(get_valve_id("AA"));
+    start_path.valves[0][0] = valve_index;
+    start_path.valves[1][0] = valve_index;
+    simulate_path(start_path, 0);
 
-    time_t time_end = clock(); 
+    time_t time_end = clock();
     printf("Pressure released: %d, Elapsed time: %fs\n", best_pressure, (double)(time_end - time_start) / (double)CLK_TCK);
 }
