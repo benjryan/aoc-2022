@@ -3,6 +3,9 @@
 #include <string.h>
 #include <time.h>
 
+#define MAX_MINUTES 26
+#define MAX_VALVES 128
+
 typedef struct Valve
 {
     short id;
@@ -14,21 +17,20 @@ typedef struct Valve
 
 typedef struct Path
 {
-    char opened[256];
+    char opened[MAX_VALVES];
+    char visited[MAX_VALVES];
     char minute[2];
-    char valves[2][30];
+    char valves[2];
+    char finished[2];
     int rate;
     int pressure;
 } Path;
 
-Valve valves[256] = {};
+Valve valves[MAX_VALVES] = {};
 int valve_count = 0;
 int best_pressure = 0;
 
-short get_valve_id(char* s)
-{
-    return s[0] << 8 | s[1];
-}
+#define get_valve_id(s) (s[0] << 8 | s[1])
 
 char get_valve_index(short id)
 {
@@ -43,29 +45,41 @@ char get_valve_index(short id)
 
 void simulate_path(Path path, int player)
 {
-    if (player == 0)
-        path.pressure += path.rate;
-
     int minute = path.minute[player];
 
     // Optimisation - Safe to say if we haven't released anything in 5 minutes
     // then we're not breaking any records.
-    if (minute >= 5 && path.rate == 0)
+    if (minute >= 5 && path.pressure <= 20)
         return;
+    
+    // Optimisation - Cheating. You could only know these numbers if you already
+    // knew the answer to the question.
+    //if (minute >= 10 && path.pressure < 150)
+    //    return;
 
-    if (minute == 25)
+    if (player == 0)
+        path.pressure += path.rate;
+
+    if (minute == MAX_MINUTES - 1)
     {
         //printf("p = %d, minute %d, pressure %d\n", player, minute, path.pressure);
         if (path.pressure > best_pressure)
-        {
             best_pressure = path.pressure;
-        }
+
+        return;
+    }
+
+    char other_player = (player + 1) % 2;
+    char valve_index = path.valves[player];
+    if (path.finished[player])
+    {
+        //printf("p = %d, minute %d, wait %d\n", player, minute, (int)valve_index);
+        path.minute[player]++;
+        simulate_path(path, other_player);
         return;
     }
 
     int simulated = 0;
-    char other_player = (player + 1) % 2;
-    char valve_index = path.valves[player][minute];
     Valve* valve = valves + valve_index;
 
     // open
@@ -74,8 +88,9 @@ void simulate_path(Path path, int player)
         Path new_path = path;
         new_path.opened[valve_index] = 1;
         new_path.rate += valve->rate;
-        new_path.minute[player]++;
-        new_path.valves[player][new_path.minute[player]] = valve_index;
+        new_path.minute[player] = minute + 1;
+        new_path.valves[player] = valve_index;
+        //new_path.valves[player][new_path.minute[player]] = valve_index;
         //printf("p = %d, minute %d, open %d\n", player, minute, (int)valve_index);
         simulate_path(new_path, other_player);
         simulated = 1;
@@ -88,26 +103,13 @@ void simulate_path(Path path, int player)
         if (path.opened[next_index])
             continue;
 
-        int in_history = 0;
-        for (int p = 0; p < 2; p++)
-        {
-            for (int j = 0; j < path.minute[p]; ++j)
-            {
-                if (next_index == path.valves[p][j])
-                {
-                    in_history = 1;
-                    goto exit_loop;
-                }
-            }
-        }
-
-exit_loop:
-        if (in_history)
+        if (path.visited[next_index])
             continue;
 
         Path new_path = path;
-        new_path.minute[player]++;
-        new_path.valves[player][new_path.minute[player]] = next_index;
+        new_path.minute[player] = minute + 1;
+        new_path.valves[player] = next_index;
+        new_path.visited[next_index] = 1;
         //printf("p = %d, minute %d, move %d\n", player, minute, (int)next_index);
         simulate_path(new_path, other_player);
         simulated = 1;
@@ -117,9 +119,20 @@ exit_loop:
     if (simulated == 0)
     {
         //printf("p = %d, minute %d, wait %d\n", player, minute, (int)valve_index);
-        path.minute[player]++;
-        path.valves[player][path.minute[player]] = valve_index;
-        simulate_path(path, other_player);
+        if (path.finished[other_player])
+        {
+            int minutes_remaining = MAX_MINUTES - (minute + 1);
+            int final_pressure = path.pressure + path.rate * minutes_remaining;
+            if (final_pressure > best_pressure)
+                best_pressure = final_pressure;
+        }
+        else 
+        {
+            path.finished[player] = 1;
+            path.minute[player] = minute + 1;
+            path.valves[player] = valve_index;
+            simulate_path(path, other_player);
+        }
     }
 }
 
@@ -172,8 +185,9 @@ int main()
 
     Path start_path = {};
     char valve_index = get_valve_index(get_valve_id("AA"));
-    start_path.valves[0][0] = valve_index;
-    start_path.valves[1][0] = valve_index;
+    start_path.valves[0] = valve_index;
+    start_path.valves[1] = valve_index;
+    start_path.visited[valve_index] = 1;
     simulate_path(start_path, 0);
 
     time_t time_end = clock();
